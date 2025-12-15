@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
@@ -30,11 +31,13 @@ st.write(
 )
 
 # =====================================================
-# LOAD DATA
+# LOAD DATA (FIXED – STREAMLIT CLOUD SAFE)
 # =====================================================
 @st.cache_data
 def load_data():
-    return pd.read_csv("road_accident_clean.csv")
+    base_dir = os.path.dirname(__file__)
+    file_path = os.path.join(base_dir, "prediction_results.csv")
+    return pd.read_csv(file_path)
 
 df = load_data()
 
@@ -52,7 +55,7 @@ X = yearly[["year"]].values
 y = yearly["accident_count"].values
 
 # =====================================================
-# SCALE YEAR (IMPORTANT FIX)
+# SCALE YEAR
 # =====================================================
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
@@ -68,12 +71,12 @@ for train_idx, test_idx in loo.split(X_scaled):
     X_tr, X_te = X_scaled[train_idx], X_scaled[test_idx]
     y_tr, y_te = y[train_idx], y[test_idx]
 
-    # --- Linear Regression ---
+    # Linear Regression
     lr = LinearRegression()
     lr.fit(X_tr, y_tr)
     lr_errors.append(mean_absolute_error(y_te, lr.predict(X_te)))
 
-    # --- Polynomial Regression ---
+    # Polynomial Regression
     poly = Pipeline([
         ("poly", PolynomialFeatures(degree=2, include_bias=False)),
         ("lr", LinearRegression())
@@ -81,7 +84,7 @@ for train_idx, test_idx in loo.split(X_scaled):
     poly.fit(X_tr, y_tr)
     poly_errors.append(mean_absolute_error(y_te, poly.predict(X_te)))
 
-    # --- Random Forest ---
+    # Random Forest
     rf = RandomForestRegressor(
         n_estimators=300,
         random_state=42
@@ -111,12 +114,12 @@ st.subheader("🧠 Model Interpretation")
 st.write("""
 - **Linear Regression** serves as a baseline model for interpretability.
 - **Polynomial Regression (degree = 2)** captures non-linear temporal trends and is used for future prediction.
-- **Random Forest** achieves competitive accuracy but is not suitable for extrapolating unseen future years.
+- **Random Forest** is evaluated for comparison but is not suitable for extrapolating unseen future years.
 - **Leave-One-Out Cross Validation (LOO-CV)** is applied due to the limited number of yearly observations.
 """)
 
 # =====================================================
-# TRAIN FINAL MODELS (FULL DATA)
+# TRAIN FINAL MODELS
 # =====================================================
 lr_final = LinearRegression()
 lr_final.fit(X_scaled, y)
@@ -156,14 +159,13 @@ st.success(
 st.subheader("📅 Multi-Year Accident Forecast")
 
 future_years = pd.DataFrame({
-    "Year": range(int(yearly["year"].max()) + 1,
-                  int(yearly["year"].max()) + 6)
+    "Year": range(
+        int(yearly["year"].max()) + 1,
+        int(yearly["year"].max()) + 6
+    )
 })
 
-future_scaled_all = scaler.transform(
-    future_years[["Year"]].values
-)
-
+future_scaled_all = scaler.transform(future_years[["Year"]].values)
 future_years["Predicted Accidents"] = (
     poly_final.predict(future_scaled_all).astype(int)
 )
@@ -175,7 +177,7 @@ st.dataframe(future_years, use_container_width=True)
 # =====================================================
 st.subheader("📈 Accident Trend & Prediction")
 
-fig, ax = plt.subplots(figsize=(10,4))
+fig, ax = plt.subplots(figsize=(10, 4))
 
 ax.plot(yearly["year"], yearly["accident_count"], marker="o", label="Actual")
 ax.plot(yearly["year"], yearly["LR_Pred"], linestyle="--", label="Linear Regression")
@@ -204,7 +206,7 @@ st.subheader("⚠ Model Limitations")
 
 st.info("""
 - Predictions are based solely on historical accident trends.
-- Limited number of yearly observations may restrict long-term accuracy.
-- External factors such as weather conditions, infrastructure changes, or policy interventions are not included.
+- Limited yearly observations may restrict long-term accuracy.
+- External factors such as weather, road conditions, or policy changes are not included.
 - Results are intended strictly for academic and analytical purposes.
 """)
