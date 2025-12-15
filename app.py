@@ -31,7 +31,7 @@ st.write(
 )
 
 # =====================================================
-# LOAD DATA (FIXED – STREAMLIT CLOUD SAFE)
+# LOAD DATA (STREAMLIT CLOUD SAFE)
 # =====================================================
 @st.cache_data
 def load_data():
@@ -42,12 +42,12 @@ def load_data():
 df = load_data()
 
 # =====================================================
-# PREPARE YEARLY DATA
+# PREPARE YEARLY DATA (FIXED)
 # =====================================================
 yearly = (
-    df.groupby("year")["accident_count"]
-    .sum()
-    .reset_index()
+    df.rename(columns={
+        "Predicted_Accidents": "accident_count"
+    })
     .sort_values("year")
 )
 
@@ -84,7 +84,7 @@ for train_idx, test_idx in loo.split(X_scaled):
     poly.fit(X_tr, y_tr)
     poly_errors.append(mean_absolute_error(y_te, poly.predict(X_te)))
 
-    # Random Forest
+    # Random Forest (comparison only)
     rf = RandomForestRegressor(
         n_estimators=300,
         random_state=42
