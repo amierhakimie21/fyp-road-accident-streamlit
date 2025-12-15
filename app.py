@@ -1,37 +1,34 @@
 # =====================================================
-# ROAD ACCIDENT PREDICTION SYSTEM (FYP-READY & HOSTING-SAFE)
+# ROAD ACCIDENT TREND ANALYSIS SYSTEM (FYP-READY & HOSTING-SAFE)
 # =====================================================
 
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
 import os
 
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error
-from sklearn.model_selection import LeaveOneOut
 from sklearn.preprocessing import StandardScaler
 
 # =====================================================
 # PAGE CONFIG
 # =====================================================
-st.set_page_config(page_title="Road Accident Prediction", layout="wide")
+st.set_page_config(
+    page_title="Road Accident Trend Analysis",
+    layout="wide"
+)
 
-st.title("🚗 Road Accident Prediction System")
+st.title("🚗 Road Accident Trend Analysis System")
 st.write(
     "This system illustrates road accident trend behaviour using machine learning "
     "based on yearly accident data."
 )
-st.caption(
-    "All analyses and model-generated trends are conducted using data starting from year 2023."
-)
+st.caption("All analyses are based on data starting from year 2023.")
 
 # =====================================================
-# LOAD DATA (FAIL-SAFE)
+# LOAD DATA
 # =====================================================
 @st.cache_data
 def load_data():
@@ -39,26 +36,24 @@ def load_data():
     file_path = os.path.join(base_dir, "prediction_results.csv")
 
     if not os.path.exists(file_path):
-        st.error("❌ prediction_results.csv not found in repository.")
+        st.error("❌ prediction_results.csv not found.")
         st.stop()
 
     df = pd.read_csv(file_path)
 
-    required_cols = {"year", "Predicted_Accidents"}
-    if not required_cols.issubset(df.columns):
+    if not {"year", "Predicted_Accidents"}.issubset(df.columns):
         st.error("❌ CSV must contain columns: year, Predicted_Accidents")
         st.stop()
 
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
     df["Predicted_Accidents"] = pd.to_numeric(df["Predicted_Accidents"], errors="coerce")
-    df = df.dropna()
 
-    return df
+    return df.dropna()
 
 df = load_data()
 
 # =====================================================
-# PREPARE DATA (2023 ONWARDS)
+# PREPARE DATA
 # =====================================================
 yearly = (
     df.rename(columns={"Predicted_Accidents": "accident_count"})
@@ -74,136 +69,108 @@ X = yearly[["year"]].values
 y = yearly["accident_count"].values
 
 # =====================================================
-# SCALE YEAR
+# SCALE + TRAIN MODEL
 # =====================================================
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# =====================================================
-# MODEL BEHAVIOUR ANALYSIS (LOO-CV)
-# =====================================================
-loo = LeaveOneOut()
-lr_errors, poly_errors, rf_errors = [], [], []
-
-for train_idx, test_idx in loo.split(X_scaled):
-    X_tr, X_te = X_scaled[train_idx], X_scaled[test_idx]
-    y_tr, y_te = y[train_idx], y[test_idx]
-
-    lr = LinearRegression().fit(X_tr, y_tr)
-    lr_errors.append(mean_absolute_error(y_te, lr.predict(X_te)))
-
-    poly = Pipeline([
-        ("poly", PolynomialFeatures(degree=2, include_bias=False)),
-        ("lr", LinearRegression())
-    ]).fit(X_tr, y_tr)
-    poly_errors.append(mean_absolute_error(y_te, poly.predict(X_te)))
-
-    rf = RandomForestRegressor(n_estimators=300, random_state=42)
-    rf.fit(X_tr, y_tr)
-    rf_errors.append(mean_absolute_error(y_te, rf.predict(X_te)))
-
-mae_lr = np.mean(lr_errors)
-mae_poly = np.mean(poly_errors)
-mae_rf = np.mean(rf_errors)
-
-# =====================================================
-# MODEL BEHAVIOUR DISPLAY
-# =====================================================
-st.subheader("📌 Model Behaviour Analysis (On Generated Data)")
-st.caption(
-    "This evaluation illustrates model behaviour on limited yearly trend data. "
-    "Zero error values indicate perfect curve fitting rather than real-world predictive accuracy."
-)
-
-def show_metric(v):
-    return "Perfect Fit" if v < 1e-6 else f"{v:,.2f}"
-
-c1, c2, c3 = st.columns(3)
-c1.metric("Linear Regression (Curve Fit)", show_metric(mae_lr))
-c2.metric("Polynomial Regression (Curve Fit)", show_metric(mae_poly))
-c3.metric("Random Forest (Comparison)", f"{mae_rf:,.2f}")
-
-# =====================================================
-# MODEL INTERPRETATION
-# =====================================================
-st.subheader("🧠 Model Interpretation")
-st.write("""
-- **Linear Regression** provides a simple and interpretable baseline.
-- **Polynomial Regression (degree = 2)** captures non-linear temporal patterns and is used for trend generation.
-- **Random Forest** is included for comparison but is unsuitable for future extrapolation.
-- **Leave-One-Out Cross Validation (LOO-CV)** is used to demonstrate model behaviour on limited data.
-""")
-
-# =====================================================
-# TRAIN FINAL MODELS
-# =====================================================
-lr_final = LinearRegression().fit(X_scaled, y)
-
-poly_final = Pipeline([
+poly_model = Pipeline([
     ("poly", PolynomialFeatures(degree=2, include_bias=False)),
     ("lr", LinearRegression())
-]).fit(X_scaled, y)
-
-yearly["Poly_Fit"] = poly_final.predict(X_scaled)
+])
+poly_model.fit(X_scaled, y)
 
 # =====================================================
-# MODEL-GENERATED TREND (2023–2032)
+# YEAR SLICER
 # =====================================================
-st.subheader("📊 Model-Generated Accident Trend (2023–2032)")
+st.subheader("🎚 Select Year for Trend Illustration")
 
-prediction_years = pd.DataFrame({
-    "Year": range(2023, 2033)
-})
-
-prediction_scaled = scaler.transform(prediction_years[["Year"]])
-prediction_years["Predicted Accidents"] = (
-    poly_final.predict(prediction_scaled).astype(int)
-)
-
-st.dataframe(prediction_years, use_container_width=True)
-
-st.info(
-    "Accident values from 2023 to 2032 are generated using polynomial regression "
-    "to illustrate long-term trend behaviour and do not represent actual future accident counts."
+selected_year = st.slider(
+    "Choose a year",
+    min_value=2023,
+    max_value=2032,
+    value=2028,
+    step=1
 )
 
 # =====================================================
-# VISUALIZATION
+# BUTTON
 # =====================================================
-st.subheader("📈 Accident Trend & Model-Generated Projection")
+show_result = st.button("▶ Show Result")
 
-fig, ax = plt.subplots(figsize=(10, 4))
+# =====================================================
+# RESULT SECTION
+# =====================================================
+if show_result:
+    st.markdown("---")
+    st.subheader("📊 Model-Generated Result")
 
-ax.plot(
-    yearly["year"],
-    yearly["accident_count"],
-    marker="o",
-    label="Input Data (2023–2027)"
-)
+    # Prediction
+    scaled_year = scaler.transform([[selected_year]])
+    predicted_value = int(poly_model.predict(scaled_year)[0])
 
-ax.plot(
-    yearly["year"],
-    yearly["Poly_Fit"],
-    linestyle="-.",
-    label="Polynomial Fit"
-)
+    result_df = pd.DataFrame({
+        "Year": [selected_year],
+        "Predicted Accidents": [predicted_value]
+    })
 
-ax.plot(
-    prediction_years["Year"],
-    prediction_years["Predicted Accidents"],
-    marker="o",
-    linestyle="--",
-    color="red",
-    label="Model-Generated Trend (2023–2032)"
-)
+    st.dataframe(result_df, use_container_width=True)
 
-ax.set_xlim(2023, 2032)
-ax.set_xlabel("Year")
-ax.set_ylabel("Accident Count")
-ax.legend()
-ax.grid(True)
+    st.success(
+        f"Model-generated accident count for **{selected_year}** is "
+        f"**{predicted_value:,} cases**."
+    )
 
-st.pyplot(fig)
+    # =================================================
+    # VISUALIZATION (BEST PRACTICE)
+    # =================================================
+    st.subheader("📈 Trend Context Visualization")
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    # Historical data
+    ax.plot(
+        yearly["year"],
+        yearly["accident_count"],
+        marker="o",
+        label="Historical Data (≥2023)"
+    )
+
+    # Extrapolation line (dashed)
+    last_year = yearly["year"].iloc[-1]
+    last_value = yearly["accident_count"].iloc[-1]
+
+    ax.plot(
+        [last_year, selected_year],
+        [last_value, predicted_value],
+        linestyle=":",
+        color="red",
+        alpha=0.7,
+        label="Extrapolated Trend"
+    )
+
+    # Selected prediction point
+    ax.scatter(
+        selected_year,
+        predicted_value,
+        color="red",
+        s=100,
+        zorder=5,
+        label="Selected Year (Model Output)"
+    )
+
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Accident Count")
+    ax.set_xlim(2023, max(2032, selected_year))
+    ax.legend()
+    ax.grid(True)
+
+    st.pyplot(fig)
+
+    st.info(
+        "The dashed red line represents model extrapolation beyond observed data. "
+        "Values are generated for trend illustration purposes only."
+    )
 
 # =====================================================
 # LIMITATIONS
@@ -211,7 +178,7 @@ st.pyplot(fig)
 st.subheader("⚠ Model Limitations")
 st.info("""
 - The dataset contains a limited number of yearly observations.
-- Generated values are intended to illustrate trend behaviour only.
-- External factors such as policy changes, weather conditions, and infrastructure development are not included.
-- Results are for academic and analytical purposes only.
+- Generated values are illustrative and do not represent actual future accident counts.
+- External factors such as policy changes, weather, and infrastructure are not included.
+- Results are intended for academic and analytical purposes only.
 """)
